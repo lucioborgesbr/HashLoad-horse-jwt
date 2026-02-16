@@ -47,9 +47,11 @@ type
 
   TSkipRouteMethods = TArray<TSkipRouteMethod>;
   {$IF DEFINED(FPC)}
-  TOnResponse = {$IF DEFINED(HORSE_FPC_FUNCTIONREFERENCES)}reference to {$ENDIF}procedure(const AHorseResponse: THorseResponse; const AMessage: string; const AHTTPStatus: THTTPStatus; const APathInfo: string);
+  TOnResponse = {$IF DEFINED(HORSE_FPC_FUNCTIONREFERENCES)}reference to {$ENDIF}procedure(const AHorseResponse: THorseResponse; const AMessage: string; const AHTTPStatus: THTTPStatus);
+  TOnResponseWithPath = {$IF DEFINED(HORSE_FPC_FUNCTIONREFERENCES)}reference to {$ENDIF}procedure(const AHorseResponse: THorseResponse; const AMessage: string; const AHTTPStatus: THTTPStatus; const APathInfo: string);
   {$ELSE}
-  TOnResponse = reference to procedure(const AHorseResponse: THorseResponse; const AMessage: string; const AHTTPStatus: THTTPStatus; const APathInfo: string);
+  TOnResponse = reference to procedure(const AHorseResponse: THorseResponse; const AMessage: string; const AHTTPStatus: THTTPStatus);
+  TOnResponseWithPath = reference to procedure(const AHorseResponse: THorseResponse; const AMessage: string; const AHTTPStatus: THTTPStatus; const APathInfo: string);
   {$ENDIF}
 
   IHorseJWTConfig = interface
@@ -76,8 +78,10 @@ type
     function ExpectedAudience(const AValue: TArray<string>): IHorseJWTConfig; overload;
     function SessionClass: TClass; overload;
     function SessionClass(const AValue: TClass): IHorseJWTConfig; overload;
-	  function OnResponse: TOnResponse; overload;
-    function OnResponse(const AValue: TOnResponse): IHorseJWTConfig; overload;										   
+    function OnResponse: TOnResponse; overload;
+    function OnResponseWithPath: TOnResponseWithPath;
+    function OnResponse(const AValue: TOnResponse): IHorseJWTConfig; overload;
+    function OnResponse(const AValue: TOnResponseWithPath): IHorseJWTConfig; overload;
   end;
 
   { THorseJWTConfig }
@@ -95,7 +99,8 @@ type
     FIsRequiredNotBefore: Boolean;
     FIsRequiredSubject: Boolean;
     FSessionClass: TClass;
-	  FOnResponse: TOnResponse;
+    FOnResponse: TOnResponse;
+    FOnResponseWithPath: TOnResponseWithPath;
     function SkipRoutes: TArray<string>; overload;
     function SkipRoutes(const ARoutes: TArray<string>): IHorseJWTConfig; overload;
     function SkipRoutes(const ARoute: string): IHorseJWTConfig; overload;
@@ -119,8 +124,10 @@ type
     function ExpectedAudience(const AValue: TArray<string>): IHorseJWTConfig; overload;
     function SessionClass: TClass; overload;
     function SessionClass(const AValue: TClass): IHorseJWTConfig; overload;
-	  function OnResponse: TOnResponse; overload;
+    function OnResponse: TOnResponse; overload;
+    function OnResponseWithPath: TOnResponseWithPath;
     function OnResponse(const AValue: TOnResponse): IHorseJWTConfig; overload;
+    function OnResponse(const AValue: TOnResponseWithPath): IHorseJWTConfig; overload;
   public
     constructor Create;
     class function New: IHorseJWTConfig;
@@ -206,6 +213,15 @@ var
     Result := (LJWT.Signature = LSignCalc);
   end;
 {$ENDIF}
+  procedure DoResponse(const AMessage: string; const AStatus: THTTPStatus);
+  begin
+    if Assigned(LConfig.OnResponseWithPath) then
+      LConfig.OnResponseWithPath()(AHorseResponse, AMessage, AStatus, LPathInfo)
+    else if Assigned(LConfig.OnResponse) then
+      LConfig.OnResponse()(AHorseResponse, AMessage, AStatus)
+    else
+      AHorseResponse.Send(AMessage).Status(AStatus);
+  end;
 begin
   LConfig := AConfig;
   if AConfig = nil then
@@ -247,24 +263,18 @@ begin
   LToken := AHorseRequest.Headers[LConfig.Header];
   if LToken.IsEmpty then
     LToken := AHorseRequest.Cookie.Items[LConfig.Header];
-    
+
   if LToken.Trim.IsEmpty and not AHorseRequest.Query.TryGetValue(
     LConfig.Header, LToken) and not AHorseRequest.Query.TryGetValue(
     LHeaderNormalize, LToken) then
   begin
-    if Assigned(LConfig.OnResponse()) then
-      LConfig.OnResponse()(AHorseResponse, TOKEN_NOT_FOUND, THTTPStatus.Unauthorized, LPathInfo)
-    else
-      AHorseResponse.Send(TOKEN_NOT_FOUND).Status(THTTPStatus.Unauthorized);
+    DoResponse(TOKEN_NOT_FOUND, THTTPStatus.Unauthorized);
     raise EHorseCallbackInterrupted.Create(TOKEN_NOT_FOUND);
   end;
 
   if Pos('bearer', LowerCase(LToken)) = 0 then
   begin
-    if Assigned(LConfig.OnResponse()) then
-       LConfig.OnResponse()(AHorseResponse, INVALID_AUTHORIZATION_TYPE, THTTPStatus.Unauthorized, LPathInfo)
-    else
-      AHorseResponse.Send(INVALID_AUTHORIZATION_TYPE).Status(THTTPStatus.Unauthorized);
+    DoResponse(INVALID_AUTHORIZATION_TYPE, THTTPStatus.Unauthorized);
     raise EHorseCallbackInterrupted.Create(INVALID_AUTHORIZATION_TYPE);
   end;
 
@@ -290,20 +300,14 @@ begin
     try
       LJWT := TJOSEContext.Create(LToken, TJWTClaims);
     except
-      if Assigned(LConfig.OnResponse()) then
-        LConfig.OnResponse()(AHorseResponse, UNAUTHORIZED, THTTPStatus.Unauthorized, LPathInfo)
-      else
-        AHorseResponse.Send(UNAUTHORIZED).Status(THTTPStatus.Unauthorized);
+      DoResponse(UNAUTHORIZED, THTTPStatus.Unauthorized);
       raise EHorseCallbackInterrupted.Create(UNAUTHORIZED);
     end;
 
     try
       if LJWT.GetJOSEObject = nil then
       begin
-        if Assigned(LConfig.OnResponse()) then
-          LConfig.OnResponse()(AHorseResponse, UNAUTHORIZED, THTTPStatus.Unauthorized, LPathInfo)
-        else
-          AHorseResponse.Send(UNAUTHORIZED).Status(THTTPStatus.Unauthorized);
+        DoResponse(UNAUTHORIZED, THTTPStatus.Unauthorized);
         raise EHorseCallbackInterrupted.Create(UNAUTHORIZED);
       end;
 
@@ -375,10 +379,7 @@ begin
       except
         on E: Exception do
         begin
-          if Assigned(LConfig.OnResponse()) then
-            LConfig.OnResponse()(AHorseResponse, UNAUTHORIZED, THTTPStatus.Unauthorized, LPathInfo)
-          else
-            AHorseResponse.Send(UNAUTHORIZED).Status(THTTPStatus.Unauthorized);
+          DoResponse(UNAUTHORIZED, THTTPStatus.Unauthorized);
           raise EHorseCallbackInterrupted.Create(UNAUTHORIZED);
         end;
       end;
@@ -390,10 +391,7 @@ begin
       raise;
     on E: Exception do
     begin
-      if Assigned(LConfig.OnResponse()) then
-        LConfig.OnResponse()(AHorseResponse, 'Invalid token authorization. ' + E.Message, THTTPStatus.Unauthorized, LPathInfo)
-      else
-        AHorseResponse.Send('Invalid token authorization. ' + E.Message).Status(THTTPStatus.Unauthorized);
+      DoResponse('Invalid token authorization. ' + E.Message, THTTPStatus.Unauthorized);
       raise EHorseCallbackInterrupted.Create;
     end;
   end;
@@ -569,7 +567,6 @@ var
 begin
   FSkipRouteMethods := AValue;
 
-  // نرمال‌سازی مثل SkipRoutes
   for I := 0 to High(FSkipRouteMethods) do
     if (FSkipRouteMethods[I].Route <> '') and
        (FSkipRouteMethods[I].Route[1] <> '/') then
@@ -598,9 +595,20 @@ begin
   Result := FOnResponse;
 end;
 
+function THorseJWTConfig.OnResponseWithPath: TOnResponseWithPath;
+begin
+  Result := FOnResponseWithPath;
+end;
+
 function THorseJWTConfig.OnResponse(const AValue: TOnResponse): IHorseJWTConfig;
 begin
   FOnResponse := AValue;
+  Result := Self;
+end;
+
+function THorseJWTConfig.OnResponse(const AValue: TOnResponseWithPath): IHorseJWTConfig;
+begin
+  FOnResponseWithPath := AValue;
   Result := Self;
 end;
 
