@@ -1,4 +1,4 @@
-unit Horse.JWT;
+﻿unit Horse.JWT;
 
 {$IF DEFINED(FPC)}
   {$MODE DELPHI}{$H+}
@@ -39,6 +39,7 @@ uses
 
 type
   TSkipWhen = reference to function(const APath: string; const AMethod: TMethodType): Boolean;
+
   TSkipRouteMethod = record
     Route: string;
     Method: TMethodType;
@@ -62,7 +63,8 @@ type
     function SkipWhen: TSkipWhen; overload;
     function SkipWhen(const AValue: TSkipWhen): IHorseJWTConfig; overload;
     function SkipRouteMethods: TSkipRouteMethods; overload;
-    function SkipRouteMethods(const AValue: TSkipRouteMethods): IHorseJWTConfig; overload;    function Header: string; overload;
+    function SkipRouteMethods(const AValue: TSkipRouteMethods): IHorseJWTConfig; overload;
+    function Header: string; overload;
     function Header(const AValue: string): IHorseJWTConfig; overload;
     function IsRequiredSubject: Boolean; overload;
     function IsRequiredSubject(const AValue: Boolean): IHorseJWTConfig; overload;
@@ -165,6 +167,7 @@ var
   LValidations: IJOSEConsumer;
   LJWT: TJOSEContext;
 {$ENDIF}
+  I: Integer;
   LPathInfo: string;
   LToken, LHeaderNormalize: string;
   LSession: TObject;
@@ -230,10 +233,9 @@ begin
   if LPathInfo = EmptyStr then
     LPathInfo := '/';
 
-  for var I := 0 to High(LConfig.SkipRouteMethods) do
+  for I := 0 to High(LConfig.SkipRouteMethods) do
   begin
-    if MatchRoute(LPathInfo, [LConfig.SkipRouteMethods[I].Route]) and
-       (AHorseRequest.MethodType = LConfig.SkipRouteMethods[I].Method) then
+    if MatchRoute(LPathInfo, [LConfig.SkipRouteMethods[I].Route]) and (AHorseRequest.MethodType = LConfig.SkipRouteMethods[I].Method) then
     begin
       ANext();
       Exit;
@@ -242,7 +244,7 @@ begin
 
   if Assigned(LConfig.SkipWhen) then
   begin
-    if LConfig.SkipWhen()(LPathInfo,AHorseRequest.MethodType) then
+    if LConfig.SkipWhen()(LPathInfo, AHorseRequest.MethodType) then
     begin
       ANext();
       Exit;
@@ -443,11 +445,19 @@ end;
 function THorseJWTConfig.SkipRoutes(const ARoutes: TArray<string>): IHorseJWTConfig;
 var
   I: Integer;
+  LPrefix: String;
 begin
+  LPrefix := THorse.Routes.GetPrefix();
   FSkipRoutes := ARoutes;
+
   for I := 0 to Pred(Length(FSkipRoutes)) do
+  begin
     if copy(Trim(FSkipRoutes[I]), 1, 1) <> '/' then
       FSkipRoutes[I] := '/' + FSkipRoutes[I];
+	
+    FSkipRoutes[I] := LPrefix + FSkipRoutes[I];
+  end;
+
   Result := Self;
 end;
 
@@ -560,18 +570,17 @@ begin
   Result := FSkipRouteMethods;
 end;
 
-function THorseJWTConfig.SkipRouteMethods(
-  const AValue: TSkipRouteMethods): IHorseJWTConfig;
+function THorseJWTConfig.SkipRouteMethods(const AValue: TSkipRouteMethods): IHorseJWTConfig;
 var
   I: Integer;
 begin
   FSkipRouteMethods := AValue;
 
   for I := 0 to High(FSkipRouteMethods) do
-    if (FSkipRouteMethods[I].Route <> '') and
-       (FSkipRouteMethods[I].Route[1] <> '/') then
+  begin
+    if (FSkipRouteMethods[I].Route <> '') and (FSkipRouteMethods[I].Route[1] <> '/') then
       FSkipRouteMethods[I].Route := '/' + FSkipRouteMethods[I].Route;
-
+  end;
   Result := Self;
 end;
 
