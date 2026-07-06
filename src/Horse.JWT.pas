@@ -262,7 +262,8 @@ begin
   LToken := AHorseRequest.Headers[LHeaderNormalize];
   if LToken.IsEmpty then
   begin
-    LHeaderNormalize := LConfig.Header.Substring(0, 1).ToUpper + LConfig.Header.Substring(1);
+    if Length(LHeaderNormalize) > 0 then
+      LHeaderNormalize[1] := UpCase(LHeaderNormalize[1]);
     LToken := AHorseRequest.Headers[LHeaderNormalize];
   end;
 
