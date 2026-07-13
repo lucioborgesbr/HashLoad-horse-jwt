@@ -1,4 +1,4 @@
-﻿unit Horse.JWT;
+unit Horse.JWT;
 
 {$IF DEFINED(FPC)}
   {$MODE DELPHI}{$H+}
@@ -382,6 +382,13 @@ begin
           LSession := LJSON;
 {$ENDIF}
         AHorseRequest.Session(LSession);
+        if Assigned(LSession) then
+        begin
+          if Assigned(LConfig.SessionClass) then
+            AHorseRequest.Services.Add(LConfig.SessionClass, LSession, False)
+          else
+            AHorseRequest.Services.Add(LSession.ClassType, LSession, False);
+        end;
       except
         on E: Exception do
         begin
