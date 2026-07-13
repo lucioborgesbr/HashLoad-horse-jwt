@@ -295,6 +295,64 @@ begin
 end.
 ```
 
+#### How to read the Payload from Services container (Avoiding Session conflicts)
+
+If you need to use `Req.Session` for other purposes in your application (e.g. database sessions or custom user profiles), you can retrieve the JWT payload safely from the `Req.Services` dependency injection container:
+
+```delphi
+uses
+  Horse, Horse.JWT,
+  MyClaims in 'MyClaims.pas',
+  System.SysUtils;
+
+begin
+  THorse
+    .AddCallback(HorseJWT('MY-PASSWORD', THorseJWTConfig.New.SessionClass(TMyClaims)))
+    .Get('ping', 
+      procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+      var
+        LClaims: TMyClaims;
+      begin
+        // Retrieve claims safely from Req.Services instead of Req.Session
+        LClaims := Req.Services.Resolve(TMyClaims) as TMyClaims;
+
+        Res.Send(Format('Hello %s, your email is %s', [LClaims.Name, LClaims.Email]));
+      end);
+
+  THorse.Listen(9000);
+end.
+```
+
+If you are **not** using a custom `SessionClass` configuration, the payload will be registered as a standard `TJSONObject`. You can retrieve it like this:
+
+```delphi
+uses
+  Horse, Horse.JWT,
+  System.JSON,
+  System.SysUtils;
+
+begin
+  THorse.Use(HorseJWT('MY-PASSWORD'));
+
+  THorse.Get('/ping', 
+    procedure(Req: THorseRequest; Res: THorseResponse; Next: TProc)
+    var
+      LClaims: TJSONObject;
+    begin
+      // Retrieve the default JSON payload safely from Req.Services
+      LClaims := Req.Services.Resolve(TJSONObject) as TJSONObject;
+
+      Res.Send('Subject: ' + LClaims.GetValue('sub').Value);
+    end);
+
+  THorse.Listen(9000);
+end.
+```
+
+> [!NOTE]  
+> Under Lazarus/FPC, import `fpjson` instead of `System.JSON` to work with the default `TJSONObject`.
+
+
 #### How to create public and private routes?
 
 ```Delphi
