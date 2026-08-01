@@ -47,12 +47,13 @@ type
   end;
 
   TSkipRouteMethods = TArray<TSkipRouteMethod>;
+
   {$IF DEFINED(FPC)}
-  TOnResponse = {$IF DEFINED(HORSE_FPC_FUNCTIONREFERENCES)}reference to {$ENDIF}procedure(const AHorseResponse: THorseResponse; const AMessage: string; const AHTTPStatus: THTTPStatus);
-  TOnResponseWithPath = {$IF DEFINED(HORSE_FPC_FUNCTIONREFERENCES)}reference to {$ENDIF}procedure(const AHorseResponse: THorseResponse; const AMessage: string; const AHTTPStatus: THTTPStatus; const APathInfo: string);
+    TOnResponse = {$IF DEFINED(HORSE_FPC_FUNCTIONREFERENCES)}reference to {$ENDIF}procedure(const AHorseResponse: THorseResponse; const AMessage: string; const AHTTPStatus: THTTPStatus);
+    TOnResponseWithPath = {$IF DEFINED(HORSE_FPC_FUNCTIONREFERENCES)}reference to {$ENDIF}procedure(const AHorseResponse: THorseResponse; const AMessage: string; const AHTTPStatus: THTTPStatus; const APathInfo: string);
   {$ELSE}
-  TOnResponse = reference to procedure(const AHorseResponse: THorseResponse; const AMessage: string; const AHTTPStatus: THTTPStatus);
-  TOnResponseWithPath = reference to procedure(const AHorseResponse: THorseResponse; const AMessage: string; const AHTTPStatus: THTTPStatus; const APathInfo: string);
+    TOnResponse = reference to procedure(const AHorseResponse: THorseResponse; const AMessage: string; const AHTTPStatus: THTTPStatus);
+    TOnResponseWithPath = reference to procedure(const AHorseResponse: THorseResponse; const AMessage: string; const AHTTPStatus: THTTPStatus; const APathInfo: string);
   {$ENDIF}
 
   IHorseJWTConfig = interface
@@ -227,11 +228,18 @@ var
   end;
 begin
   LConfig := AConfig;
+
   if AConfig = nil then
+  begin
     LConfig := THorseJWTConfig.New;
+  end;
+
   LPathInfo := AHorseRequest.RawWebRequest.PathInfo;
+
   if LPathInfo = EmptyStr then
+  begin
     LPathInfo := '/';
+  end;
 
   for I := 0 to High(LConfig.SkipRouteMethods) do
   begin
@@ -456,17 +464,24 @@ end;
 function THorseJWTConfig.SkipRoutes(const ARoutes: TArray<string>): IHorseJWTConfig;
 var
   I: Integer;
-  LPrefix: String;
+  LPrefix: string;
 begin
   LPrefix := THorse.Routes.GetPrefix();
   FSkipRoutes := ARoutes;
 
   for I := 0 to Pred(Length(FSkipRoutes)) do
   begin
-    if copy(Trim(FSkipRoutes[I]), 1, 1) <> '/' then
+    FSkipRoutes[I] := Trim(FSkipRoutes[I]);
+
+    if Copy(FSkipRoutes[I], 1, 1) <> '/' then
+    begin
       FSkipRoutes[I] := '/' + FSkipRoutes[I];
-	
-    FSkipRoutes[I] := LPrefix + FSkipRoutes[I];
+    end;
+
+    if (LPrefix <> '') and (Copy(FSkipRoutes[I], 1, Length(LPrefix)) <> LPrefix) then
+    begin
+      FSkipRoutes[I] := LPrefix + FSkipRoutes[I];
+    end;
   end;
 
   Result := Self;
@@ -590,8 +605,11 @@ begin
   for I := 0 to High(FSkipRouteMethods) do
   begin
     if (FSkipRouteMethods[I].Route <> '') and (FSkipRouteMethods[I].Route[1] <> '/') then
+    begin
       FSkipRouteMethods[I].Route := '/' + FSkipRouteMethods[I].Route;
+    end;
   end;
+
   Result := Self;
 end;
 
